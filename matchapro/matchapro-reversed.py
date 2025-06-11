@@ -33,8 +33,8 @@ for row in ws.iter_rows(min_row=2):  # skip header
     if any(cell.font and cell.font.bold for cell in row):
         bold_rows.add(row[0].row)  # baris ke-i (misalnya 2, 3, dst)
 
-for i, row in df.iterrows():
-    idsbr = str(int(row["idsbr mirip"]))
+for i, row in reversed(list(df.iterrows())):
+    idsbr = str(row["idsbr mirip"])
     excel_row = i + 2  # baris Excel dimulai dari 2 (header di baris 1)
     if excel_row in bold_rows:
         print(f"⏩ Baris ke-{excel_row} sudah bold, dilewati.")
