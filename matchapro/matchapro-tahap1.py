@@ -24,12 +24,26 @@ ws = wb.active
 # Fungsi bantu isi input
 def isi_input(driver, by, locator, value):
     try:
+        WebDriverWait(driver, 5).until(EC.presence_of_element_located((by, locator)))
         elem = driver.find_element(by, locator)
         elem.clear()
         if value:
             elem.send_keys(str(value))
-    except:
-        print(f"❌ Tidak bisa mengisi input dengan ID '{locator}'")
+        print(f"✅ Input {locator} diisi.")
+    except Exception as e:
+        print(f"❌ Tidak bisa mengisi input dengan ID '{locator}' → {e}")
+
+def safe_click(driver, by, locator):
+    try:
+        elem = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((by, locator)))
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
+        time.sleep(0.5)  # beri waktu scroll
+        elem.click()
+        print(f"✅ Klik tombol {locator}")
+        return True
+    except Exception as e:
+        print(f"❌ Gagal klik tombol {locator} → {e}")
+        return False
 
 # Baris yang sudah dibold
 bold_rows = set(row[0].row for row in ws.iter_rows(min_row=2) if any(cell.font and cell.font.bold for cell in row))
@@ -105,6 +119,7 @@ for i, row in df.iterrows():
                 wb.save("usaha.xlsx")
                 continue
         except:
+            # Cek apakah cancel-submit-final muncul
             try:
                 WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.ID, "cancel-submit-final")))
                 print("🚫 Form tidak bisa diisi (cancel-submit-final).")
@@ -121,15 +136,34 @@ for i, row in df.iterrows():
                 wb.save("usaha.xlsx")
                 continue
 
+        print("📋 Daftar elemen yang tersedia:")
+        for el in ["sumber_profiling", "catatan_profiling", "latitude", "longitude", "cek-peta"]:
+            if len(driver.find_elements(By.ID, el)) > 0:
+                print(f"✅ ID ditemukan: {el}")
+            else:
+                print(f"❌ ID tidak ditemukan: {el}")
+
         isi_input(driver, By.ID, "alamat_usaha", row.get("alamat"))
         isi_input(driver, By.ID, "sumber_profiling", row.get("Sumber"))
         isi_input(driver, By.ID, "catatan_profiling", row.get("Desk Sumber"))
         isi_input(driver, By.ID, "sls", row.get("nmsls"))
-        isi_input(driver, By.ID, "latitude", row.get("latitude2"))
-        isi_input(driver, By.ID, "longitude", row.get("longitude2"))
 
+        def safe_float(val):
+            try:
+                return round(float(val), 6)
+            except:
+                return None
+
+        time.sleep(1)  # Tunggu sebentar sebelum mengisi koordinat
+        lat = safe_float(row.get("latitude2"))
+        lon = safe_float(row.get("longitude2"))
+        print(f"🌍 Akan mengisi: Latitude = {lat}, Longitude = {lon}")
+        isi_input(driver, By.ID, "latitude", lat)
+        isi_input(driver, By.ID, "longitude", lon)
+
+        time.sleep(5)  # Tunggu sebentar sebelum mengisi koordinat
         try:
-            driver.find_element(By.ID, "cek-peta").click()
+            safe_click(driver, By.ID, "cek-peta")
             print("🗺️ Tombol 'Cek Peta' diklik.")
         except:
             print("❌ Tombol cek-peta tidak ada")
@@ -144,7 +178,7 @@ for i, row in df.iterrows():
         except:
             print("⚠️ Email field tidak tersedia")
 
-        driver.find_element(By.ID, "submit-final").click()
+        safe_click(driver, By.ID, "submit-final")
         print("✅ Klik submit-final")
 
         try:
