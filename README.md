@@ -2,55 +2,114 @@
 
 Script ini dibuat untuk membantu mengotomatisasi pekerjaan berulang yang memakan waktu, khususnya dalam lingkungan kerja yang penuh dengan tugas-tugas administratif atau data entry.
 
-## 📦 Fitur
+# 📊 Otomatisasi Entri Data Profil Usaha BPS dengan Selenium
 
-- Otomatisasi input data dari file Excel ke form web
-- Penanganan elemen form kompleks (dropdown, checkbox, input teks)
-- Logging aktivitas otomatis
-- Konfigurasi mudah, cocok untuk berbagai use case
+Skrip ini digunakan untuk mengotomatisasi proses pengisian form pada situs [Direktori Usaha BPS (Matchapro)](https://matchapro.web.bps.go.id/direktori-usaha), berdasarkan data dari file Excel (`usaha.xlsx`).
+Fungsi utama skrip ini:
 
-## 🚀 Cara Penggunaan
+- Membaca data IDSBR dan atribut terkait dari Excel
+- Mencari entri yang sesuai di Matchapro
+- Mengisi form alamat, sumber, catatan, koordinat, dll.
+- Melakukan submit otomatis hingga konfirmasi "Berhasil submit data final!" muncul
+- Menandai baris yang berhasil diproses (dengan font bold dan label "Aji")
 
-1. Pastikan Python 3.x telah terinstal di sistem Anda.
-2. Install semua dependensi yang dibutuhkan dengan perintah berikut:
+---
 
-   ```bash
-   pip install pandas selenium openpyxl
-   ```
+## 🧰 Requirement
 
-3. Unduh Chrome WebDriver yang sesuai dengan versi Chrome Anda di:
-   [https://googlechromelabs.github.io/chrome-for-testing/](https://googlechromelabs.github.io/chrome-for-testing/)
+### ✅ Sistem Operasi
 
-4. Ekstrak file `chromedriver` dan tambahkan lokasinya ke PATH sistem:
+- Windows 10/11 (wajib karena menggunakan Chrome Profile)
 
-   **Windows:**
+### ✅ Python
 
-   - Pindahkan `chromedriver.exe` ke folder seperti `C:\WebDriver\bin`
-   - Tambahkan folder tersebut ke Environment Variables > System variables > `Path`
+- Python 3.8 atau lebih tinggi (disarankan versi 3.11)
 
-   **Mac/Linux:**
+### ✅ Chrome & ChromeDriver
 
-   - Pindahkan `chromedriver` ke `/usr/local/bin/` atau folder lain yang sudah ada di PATH
-   - Atau tambahkan folder tempat `chromedriver` berada ke PATH melalui `~/.bashrc`, `~/.zshrc`, atau `~/.profile`:
+- Google Chrome versi terbaru
+- ChromeDriver **versi sama dengan Chrome**  
+  👉 [Download ChromeDriver](https://chromedriver.chromium.org/downloads)
 
-     ```bash
-     export PATH=$PATH:/path/to/your/chromedriver
-     ```
+### 🔧 Cara Menambahkan ChromeDriver ke PATH (Windows):
 
-5. Jalankan script dengan:
+1. Download ChromeDriver ZIP dari link di atas.
+2. Ekstrak `chromedriver.exe` ke folder (misal: `C:\Tools\chromedriver`)
+3. Tambahkan folder tersebut ke PATH:
+   - Buka **Control Panel → System → Advanced system settings**
+   - Klik **Environment Variables**
+   - Pilih **Path** → klik **Edit** → klik **New**
+   - Masukkan `C:\Tools\chromedriver`
+   - Klik OK, lalu restart terminal/PC bila perlu
 
-   ```bash
-   python main.py
-   ```
+---
 
-6. Ikuti instruksi atau sesuaikan isi file Excel sesuai dengan struktur yang dibutuhkan oleh script.
+## 📦 Dependency Python
 
-## ⚠️ Peringatan
+Install semua dependensi berikut:
 
-> **Gunakan dengan bijak. Jangan salahgunakan script ini. Script ini dibuat untuk _membelah diri_ karena banyaknya kerjaan yang saling bertumpukan.**
+```bash
+pip install selenium pandas openpyxl
+```
 
-Script ini ditujukan untuk membantu produktivitas dan efisiensi, bukan untuk disalahgunakan.
+---
 
-## 📄 Lisensi
+## 📁 Struktur File
 
-Script ini disediakan _as-is_ tanpa jaminan. Bebas digunakan dan dimodifikasi, namun segala risiko ditanggung oleh pengguna.
+- `usaha.xlsx` → file sumber data IDSBR dan informasi usaha
+- `script.py` → file Python otomatisasi (isi sesuai skrip Anda)
+
+---
+
+## ▶️ Cara Menjalankan
+
+1. Pastikan sudah login ke Chrome sebelumnya dan tersimpan dalam profil lokal.
+2. Jalankan skrip ini dengan:
+
+```bash
+python script.py
+```
+
+3. Skrip akan membuka halaman [matchapro.web.bps.go.id](https://matchapro.web.bps.go.id/direktori-usaha), mencari IDSBR, mengisi data dari Excel, dan klik submit otomatis.
+
+---
+
+## ⚠️ Catatan Penting
+
+- Gunakan profil Chrome yang **sudah login dan memiliki hak akses Matchapro**. Letak profil default ada di:
+  ```
+  C:\Users\NAMA_USER\AppData\Local\Google\Chrome\User Data
+  ```
+- Ubah `--user-data-dir` di dalam kode ke lokasi yang sesuai jika diperlukan:
+
+  ```python
+  options.add_argument("--user-data-dir=C:\\Shared\\Coding\\script\\bot_profil")
+  ```
+
+- Kolom `X` pada Excel akan otomatis diisi "Aji" dan dibold jika berhasil.
+- Jika modal konfirmasi atau form tidak bisa diakses, skrip akan melakukan retry otomatis hingga 3x.
+
+---
+
+## 🧪 Fitur Cerdas
+
+- Deteksi jika form sudah diedit oleh orang lain
+- Deteksi form tidak dapat diedit (misalnya tombol tidak tersedia)
+- Reload otomatis jika elemen form tidak bisa diinteraksikan
+
+---
+
+## ❓ Troubleshooting
+
+| Masalah                                 | Solusi                                                                |
+| --------------------------------------- | --------------------------------------------------------------------- |
+| Chrome terbuka tapi tidak login         | Periksa `--user-data-dir` arahkan ke folder Chrome Profile yang benar |
+| Error `chromedriver not found`          | Tambahkan folder ChromeDriver ke `PATH`                               |
+| Form tidak bisa diklik atau input gagal | Pastikan koneksi stabil, tunggu loading selesai sebelum klik/input    |
+| Gagal klik tombol akhir "Ya, Submit!"   | Periksa apakah pop-up SweetAlert muncul dengan benar                  |
+
+---
+
+## 👨‍💻 Author
+
+Dibuat untuk keperluan internal BPS oleh tim integrasi pengolahan dan diseminasi statistik.
