@@ -1,6 +1,6 @@
 # 🛠️ Python Automation Script
 
-Script ini dibuat untuk membantu mengotomatisasi pekerjaan berulang yang memakan waktu, khususnya dalam lingkungan kerja yang penuh dengan tugas-tugas administratif atau data entry.
+Script ini dibuat untuk membantu mengotomatisasi pekerjaan berulang yang memakan waktu, khususnya dalam lingkungan kerja yang penuh dengan tugas-tugas membangun negara.
 
 # 📊 Otomatisasi Entri Data Profil Usaha BPS dengan Selenium
 
