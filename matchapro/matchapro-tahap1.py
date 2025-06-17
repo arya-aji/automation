@@ -46,24 +46,16 @@ def safe_click(driver, by, locator):
         print(f"❌ Gagal klik tombol {locator} → {e}")
         return False
 
-def tunggu_loading_data_hilang(driver, max_wait1=15, max_wait2=10):
-    print("⏳ Menunggu 'Loading Data....' hilang (tahap 1)...")
+def tunggu_loading_data_hilang(driver, max_wait=20):
+    print("⏳ Menunggu loading overlay dari blockProgress hilang...")
     try:
-        WebDriverWait(driver, max_wait1).until_not(
-            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Loading Data....')]"))
+        WebDriverWait(driver, max_wait).until_not(
+            EC.presence_of_element_located((By.CLASS_NAME, "blockUI"))
         )
-        print("✅ 'Loading Data....' hilang.")
+        print("✅ Loading overlay hilang, form siap diisi.")
         return True
     except:
-        print(f"⚠️ Masih loading setelah {max_wait1} detik. Coba tunggu {max_wait2} detik lagi...")
-    try:
-        WebDriverWait(driver, max_wait2).until_not(
-            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Loading Data....')]"))
-        )
-        print("✅ 'Loading Data....' akhirnya hilang.")
-        return True
-    except:
-        print(f"❌ 'Loading Data....' masih ada setelah total {max_wait1 + max_wait2} detik.")
+        print(f"❌ Timeout: Loading overlay masih ada setelah {max_wait} detik.")
         return False
 
 bold_rows = set(row[0].row for row in ws.iter_rows(min_row=2) if any(cell.font and cell.font.bold for cell in row))
