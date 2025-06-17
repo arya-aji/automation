@@ -137,6 +137,32 @@ for i, row in df.iterrows():
                 continue
 
         print("📋 Daftar elemen yang tersedia:")
+        # Tunggu hingga "Loading Data" hilang sebelum mulai input form
+        try:
+            print("⏳ Menunggu 'Loading Data' hilang...")
+            WebDriverWait(driver, 15).until_not(
+                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Loading Data')]"))
+            )
+            print("✅ 'Loading Data' sudah hilang.")
+        except:
+            print("⚠️ Timeout: Tulisan 'Loading Data' masih ada.")
+
+        # Cek dan handle jika ada popup "Format latitude tidak valid"
+        try:
+            error_popup = WebDriverWait(driver, 3).until(
+                EC.visibility_of_element_located((By.CLASS_NAME, "swal2-popup"))
+            )
+            error_text = error_popup.find_element(By.CLASS_NAME, "swal2-html-container").text
+            if "Format latitude tidak valid" in error_text:
+                print("⚠️ Popup error: Format latitude tidak valid muncul.")
+                ok_button = error_popup.find_element(By.CSS_SELECTOR, "button.swal2-confirm")
+                driver.execute_script("arguments[0].click();", ok_button)
+                print("✅ Tombol OK diklik.")
+                time.sleep(1)
+        except:
+            print("✅ Tidak ada popup error latitude.")
+
+
         for el in ["sumber_profiling", "catatan_profiling", "latitude", "longitude", "cek-peta"]:
             if len(driver.find_elements(By.ID, el)) > 0:
                 print(f"✅ ID ditemukan: {el}")
