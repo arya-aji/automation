@@ -267,7 +267,17 @@ for i, row in df.iterrows():
 
     except Exception as e:
         print(f"❌ Error saat memproses {idsbr}: {e}")
-        driver.get("https://matchapro.web.bps.go.id/direktori-usaha")
-        time.sleep(7)
+        error_str = str(e).lower()
+        if "connection" in error_str or "reset" in error_str or "timeout" in error_str:
+            print("🔌 Terjadi masalah koneksi. Tidur 5 menit sebelum lanjut...")
+            time.sleep(300)  # Tidur 5 menit
+        else:
+            time.sleep(7)
+            
+        try:
+            driver.get("https://matchapro.web.bps.go.id/direktori-usaha")
+            time.sleep(7)
+        except:
+            print("❌ Gagal reload halaman. Coba lanjut baris berikutnya.")
 
 driver.quit()
