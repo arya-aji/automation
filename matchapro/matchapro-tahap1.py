@@ -1,4 +1,3 @@
-
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -27,12 +26,18 @@ def isi_input(driver, by, locator, value):
     try:
         WebDriverWait(driver, 5).until(EC.presence_of_element_located((by, locator)))
         elem = driver.find_element(by, locator)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
         elem.clear()
         if value:
             elem.send_keys(str(value))
         print(f"✅ Input {locator} diisi.")
+        return True
     except Exception as e:
+        if "element not interactable" in str(e):
+            print(f"⚠️ Input {locator} tidak bisa diisi karena tidak dapat diinteraksi.")
+            raise Exception("RELOAD_REQUIRED")
         print(f"❌ Tidak bisa mengisi input dengan ID '{locator}' → {e}")
+        return False
 
 def safe_click(driver, by, locator):
     try:
@@ -56,6 +61,28 @@ def tunggu_loading_data_hilang(driver, max_wait=20):
         return True
     except:
         print(f"❌ Timeout: Loading overlay masih ada setelah {max_wait} detik.")
+        return False
+
+def tunggu_konfirmasi_submit(driver, max_wait=10):
+    try:
+        WebDriverWait(driver, max_wait).until(
+            EC.visibility_of_element_located((By.CLASS_NAME, "swal2-popup"))
+        )
+        WebDriverWait(driver, 5).until(
+            EC.text_to_be_present_in_element(
+                (By.CLASS_NAME, "swal2-html-container"),
+                "Berhasil submit data final!"
+            )
+        )
+        print("✅ Konfirmasi berhasil submit muncul.")
+        try:
+            ok_button = driver.find_element(By.CLASS_NAME, "swal2-confirm")
+            ok_button.click()
+        except:
+            pass
+        return True
+    except Exception as e:
+        print(f"⚠️ Tidak menemukan konfirmasi submit final: {e}")
         return False
 
 bold_rows = set(row[0].row for row in ws.iter_rows(min_row=2) if any(cell.font and cell.font.bold for cell in row))
@@ -160,23 +187,30 @@ while i < len(df):
                 retry_count += 1
                 continue
 
-            isi_input(driver, By.ID, "alamat_usaha", row.get("alamat"))
-            isi_input(driver, By.ID, "sumber_profiling", row.get("Sumber"))
-            isi_input(driver, By.ID, "catatan_profiling", row.get("Desk Sumber"))
-            isi_input(driver, By.ID, "sls", row.get("nmsls"))
+            try:
+                isi_input(driver, By.ID, "alamat_usaha", row.get("alamat"))
+                isi_input(driver, By.ID, "sumber_profiling", row.get("Sumber"))
+                isi_input(driver, By.ID, "catatan_profiling", row.get("Desk Sumber"))
+                isi_input(driver, By.ID, "sls", row.get("nmsls"))
 
-            def safe_float(val):
-                try:
-                    return round(float(val), 6)
-                except:
-                    return None
+                def safe_float(val):
+                    try:
+                        return round(float(val), 6)
+                    except:
+                        return None
 
-            time.sleep(1)
-            lat = safe_float(row.get("latitude2"))
-            lon = safe_float(row.get("longitude2"))
-            print(f"🌍 Akan mengisi: Latitude = {lat}, Longitude = {lon}")
-            isi_input(driver, By.ID, "latitude", lat)
-            isi_input(driver, By.ID, "longitude", lon)
+                lat = safe_float(row.get("latitude2"))
+                lon = safe_float(row.get("longitude2"))
+                print(f"🌍 Akan mengisi: Latitude = {lat}, Longitude = {lon}")
+                isi_input(driver, By.ID, "latitude", lat)
+                isi_input(driver, By.ID, "longitude", lon)
+            except Exception as e:
+                if str(e) == "RELOAD_REQUIRED":
+                    print("🔁 Element tidak bisa diinteraksi, reload halaman dan ulangi pengisian...")
+                    retry_count += 1
+                    continue
+                else:
+                    raise e
 
             time.sleep(5)
             safe_click(driver, By.ID, "cek-peta")
@@ -192,6 +226,7 @@ while i < len(df):
                 print("⚠️ Email field tidak tersedia")
 
             safe_click(driver, By.ID, "submit-final")
+
             try:
                 WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.ID, "confirm-consistency"))).click()
             except:
@@ -200,10 +235,19 @@ while i < len(df):
                 WebDriverWait(driver, 2).until(EC.element_to_be_clickable((By.ID, "ignore-consistency"))).click()
             except:
                 pass
+
+            # 🔽 Tambahan baru: klik tombol "Ya, Submit!" dalam modal SweetAlert
             try:
-                WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.swal2-confirm.btn.btn-primary"))).click()
+                final_submit_btn = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button.swal2-confirm.btn.btn-primary"))
+                )
+                driver.execute_script("arguments[0].click();", final_submit_btn)
+                print("🎯 Klik tombol akhir 'Ya, Submit!' berhasil.")
+                time.sleep(3)
             except:
-                print("❌ Gagal submit terakhir")
+                print("❌ Gagal menemukan atau klik tombol 'Ya, Submit!'")
+
+            tunggu_konfirmasi_submit(driver)
 
             ws[f"X{excel_row}"] = "Aji"
             for cell in ws[excel_row]:
