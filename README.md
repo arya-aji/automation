@@ -11,7 +11,7 @@ Fungsi utama skrip ini:
 - Mencari entri yang sesuai di Matchapro
 - Mengisi form alamat, sumber, catatan, koordinat, dll.
 - Melakukan submit otomatis hingga konfirmasi "Berhasil submit data final!" muncul
-- Menandai baris yang berhasil diproses (dengan font bold dan label "Aji")
+- Menandai baris yang berhasil diproses (dengan font bold dan label "USER")
 
 ---
 
