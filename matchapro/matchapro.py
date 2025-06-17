@@ -146,6 +146,14 @@ for i, row in df.iterrows():
                 except:
                     print("❌ Tidak ditemukan input catatan_profiling")
 
+                # 3.5 Isi alamat SLS
+                try:
+                    catatan_input = driver.find_element(By.ID, "sls")
+                    catatan_input.clear()
+                    catatan_input.send_keys(row["nmsls"])
+                except:
+                    print("❌ Tidak ditemukan input SLS")
+
                 # 4. Isi Latitude
                 try:
                     lat_input = driver.find_element(By.ID, "latitude")
