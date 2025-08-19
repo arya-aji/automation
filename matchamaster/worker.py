@@ -88,9 +88,11 @@ SEL = {
     # Keberadaan Usaha (STATUS)
     "status_radios": "input[type='radio'][name='kondisi_usaha']",
 
-    # Wilayah
-    "provinsi": "#provinsi",          # value "116" -> [31] DKI JAKARTA
-    "kabupaten": "#kabupaten_kota",   # value "2319" -> [73] JAKARTA PUSAT
+    # Wilayah (cascade select2 di atas <select> asli)
+    "provinsi": "#provinsi",           # contoh value "116" untuk [31] DKI JAKARTA
+    "kabupaten": "#kabupaten_kota",    # contoh value "2319" untuk [73] JAKARTA PUSAT
+    "kecamatan": "#kecamatan",         # ← NEW
+    "kelurahan": "#kelurahan_desa",    # ← NEW
 
     # Bentuk badan usaha
     "bentuk_badan_usaha": "#badan_usaha",
@@ -112,9 +114,18 @@ SEL = {
     # Overlay loading
     "block_ui": ".blockUI",
 
-    # Locked page indicators
+    # Halaman/form indikator
     "form_header": 'h4:has-text("Form Update Usaha/Perusahaan")',
     "approval_alert": "div.alert.alert-warning",
+
+    # KBLI/Kegiatan Usaha
+    "container_repeater": "#container-kegiatan-usaha-repeater",
+    "btn_add_kegiatan": "#add-kegiatan-usaha",
+    "row_kegiatan": "[data-repeater-item]",
+    "inp_kegiatan": "input.l_kegiatan_usaha",
+    "sel_kategori": "select.l_kategori_usaha",
+    "sel_kbli": "select.l_kbli",
+    "inp_produk": "input.l_produk_utama",
 }
 
 # ---------- Error Kategori ----------
@@ -142,7 +153,7 @@ WITH cte AS (
 UPDATE direktori_ids d
 SET automation_status = 'in_progress',
     assigned_to = $1,
-    first_taken_at = COALESCE(first_taken_at, NOW()),
+    first_taken_at = COALESCE(first_taken_at, NOW() ),
     last_updated = NOW()
 FROM cte
 WHERE d.id = cte.id
@@ -199,16 +210,19 @@ async def click_if_visible(page, sel, timeout=1500):
     except: return False
 
 async def handle_any_swal(page):
+    """Klik OK semua SweetAlert yang terlihat (termasuk error lat/lng)."""
     try:
         if await page.locator(SEL["swal_text"]).is_visible():
-            _ = (await page.locator(SEL["swal_text"]).inner_text()).strip()
-        await click_if_visible(page, SEL["swal_confirm"], 1200)
-        await click_if_visible(page, SEL["swal_primary"], 1200)
+            txt = (await page.locator(SEL["swal_text"]).inner_text()).strip()
+            logger.info(f"SWAL: {txt}")
+        await click_if_visible(page, SEL["swal_confirm"], 2000)
+        await click_if_visible(page, SEL["swal_primary"], 2000)
     except: pass
 
 def to_str(x): return "" if x is None else str(x)
 
 async def dismiss_intro_popup(page):
+    """Tutup shepherd tour (Skip/Close/Escape)."""
     try:
         for _ in range(5):
             if await page.locator(".shepherd-content").count() == 0: break
@@ -273,12 +287,33 @@ async def is_approval_in_progress(page) -> bool:
     except:
         return False
 
-# ---------- Email helpers ----------
+# ---------- Email/Phone helpers ----------
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 def _is_valid_email(s: str | None) -> bool:
     return bool(s and EMAIL_RE.match(s.strip()))
 
+def _only_digits(s: str | None) -> str:
+    if not s: return ""
+    return re.sub(r"\D", "", str(s))
+
 # ---------- Field Setters ----------
+async def set_keberadaan_usaha(page, keberadaan: str):
+    """
+    Mengatur keberadaan usaha (aktif/tidak aktif/dll) sesuai data database.
+
+    keberadaan: string, misalnya "Aktif", "Tidak Aktif", "Tutup Sementara"
+    """
+    try:
+        # Pastikan ada elemen select/radio box untuk keberadaan
+        locator = page.locator("#keberadaan_usaha")
+        if await locator.count() > 0:
+            await locator.select_option(label=keberadaan)
+            print(f"✅ Keberadaan usaha diset ke {keberadaan}")
+        else:
+            print("⚠️ Elemen keberadaan usaha tidak ditemukan, skip.")
+    except Exception as e:
+        print(f"❌ Gagal set keberadaan usaha: {e}")
+
 async def set_email(page, email_value: str | None):
     """
     - Jika form sudah ada email valid -> biarkan & pastikan checkbox tetap tercentang.
@@ -333,133 +368,197 @@ async def set_email(page, email_value: str | None):
             except: pass
 
 async def set_telepon(page, telepon_value: str | None):
-    """
-    - Jika form sudah ada nomor telepon & DB kosong -> biarkan nomor yang lama
-    - Jika DB punya nomor telepon -> isi dari DB
-    """
     has_input = await page.locator(SEL["telepon"]).count() > 0
-    if not has_input:
-        return
+    if not has_input: return
 
     cur = ""
-    try:
-        cur = (await page.locator(SEL["telepon"]).input_value()) or ""
-    except:
-        cur = ""
+    try: cur = (await page.locator(SEL["telepon"]).input_value()) or ""
+    except: cur = ""
 
-    # Jika form sudah ada nomor telepon & DB kosong -> biarkan nomor yang lama
-    if cur.strip() and (not telepon_value or not telepon_value.strip()):
+    db_digits = _only_digits(telepon_value)
+    if cur.strip() and not db_digits:
         return
-
-    # Jika DB punya nomor telepon -> isi dari DB
-    if telepon_value and telepon_value.strip():
-        await page.fill(SEL["telepon"], telepon_value.strip())
+    if db_digits:
+        await page.fill(SEL["telepon"], db_digits)
 
 async def set_whatsapp(page, whatsapp_value: str | None):
-    """
-    - Jika form sudah ada nomor whatsapp & DB kosong -> biarkan nomor yang lama
-    - Jika DB punya nomor whatsapp -> isi dari DB
-    """
     has_input = await page.locator(SEL["whatsapp"]).count() > 0
-    if not has_input:
-        return
+    if not has_input: return
 
     cur = ""
-    try:
-        cur = (await page.locator(SEL["whatsapp"]).input_value()) or ""
-    except:
-        cur = ""
+    try: cur = (await page.locator(SEL["whatsapp"]).input_value()) or ""
+    except: cur = ""
 
-    # Jika form sudah ada nomor whatsapp & DB kosong -> biarkan nomor yang lama
-    if cur.strip() and (not whatsapp_value or not whatsapp_value.strip()):
+    db_digits = _only_digits(whatsapp_value)
+    if cur.strip() and not db_digits:
         return
-
-    # Jika DB punya nomor whatsapp -> isi dari DB
-    if whatsapp_value and whatsapp_value.strip():
-        await page.fill(SEL["whatsapp"], whatsapp_value.strip())
+    if db_digits:
+        await page.fill(SEL["whatsapp"], db_digits)
 
 async def set_website(page, website_value: str | None):
     if await page.locator(SEL["website"]).count() > 0 and website_value and website_value.strip():
         await page.fill(SEL["website"], website_value.strip())
 
-async def set_wilayah(page):
+# ---- Wilayah helpers (KD-based) ----
+def _norm_code(v) -> str | None:
+    """Ambil digit saja + buang leading zero. '073' -> '73'; '010' -> '10'."""
+    if v is None:
+        return None
+    s = re.sub(r"\D", "", str(v))
+    s = s.lstrip("0")
+    return s or None
+
+async def _wait_options_loaded(page, sel_css: str, min_count: int = 2, timeout: int = 6000):
+    """Tunggu select punya >= min_count option (umumnya setelah cascade)."""
+    try:
+        await page.wait_for_function(
+            """(sel,minCount)=>{ const el=document.querySelector(sel);
+                                  return !!el && el.querySelectorAll('option').length>=minCount }""",
+            arg=(sel_css, min_count),
+            timeout=timeout
+        )
+    except:
+        pass
+
+async def _select_by_label_code(page, sel_css: str, code_norm: str) -> bool:
     """
-    - Jika provinsi & kabupaten sudah terisi → skip.
-    - Jika belum, pilih provinsi (116) → delay 600ms → pilih kabupaten (2319).
-    - Guard: tunggu opsi kabupaten tersedia.
+    Pilih option berdasar label yang mengandung [code_norm] (toleran leading zero).
+    Return True jika berhasil.
     """
-    if await page.locator(SEL["provinsi"]).count() == 0 or await page.locator(SEL["kabupaten"]).count() == 0:
+    label_re = re.compile(rf"\[\s*0*{re.escape(code_norm)}\s*\]", re.I)
+    try:
+        await page.select_option(sel_css, label=label_re)
+        return True
+    except:
+        pass
+    try:
+        opts = page.locator(f"{sel_css} option")
+        n = await opts.count()
+        for i in range(n):
+            txt = (await opts.nth(i).inner_text() or "").strip()
+            if label_re.search(txt):
+                val = await opts.nth(i).get_attribute("value")
+                if val:
+                    await page.select_option(sel_css, value=val)
+                    return True
+    except:
+        pass
+    return False
+
+async def set_wilayah(
+    page,
+    kdprov: str | int | None = None,
+    kdkab:  str | int | None = None,
+    kdkec:  str | int | None = None,
+    kddesa: str | int | None = None,
+):
+    """
+    Urutan:
+      1) Provinsi (kdprov)  → tunggu load kabupaten
+      2) Kab/Kota (kdkab)   → tunggu load kecamatan
+      3) Kecamatan (kdkec)  → tunggu load kelurahan/desa
+      4) Kelurahan/Desa (kddesa)
+    Jika sudah terisi lengkap, skip. Fallback: DKI (116) & Jakpus ([73]) jika kd kosong/ga match.
+    """
+    for key in ("provinsi", "kabupaten", "kecamatan", "kelurahan"):
+        if await page.locator(SEL[key]).count() == 0:
+            logger.warning(f"Select wilayah '{key}' tidak ditemukan, skip set_wilayah")
+            return
+
+    # Sudah lengkap?
+    try:  prov_val = (await page.locator(SEL["provinsi"]).input_value()) or ""
+    except: prov_val = ""
+    try:  kab_val  = (await page.locator(SEL["kabupaten"]).input_value()) or ""
+    except: kab_val = ""
+    try:  kec_val  = (await page.locator(SEL["kecamatan"]).input_value()) or ""
+    except: kec_val = ""
+    try:  kel_val  = (await page.locator(SEL["kelurahan"]).input_value()) or ""
+    except: kel_val = ""
+
+    if prov_val.strip() and kab_val.strip() and kec_val.strip() and kel_val.strip():
+        logger.info("🔁 Wilayah sudah lengkap (prov/kab/kec/kel) — skip set_wilayah")
         return
 
-    try:
-        prov_val = await page.locator(SEL["provinsi"]).input_value()
-    except:
-        prov_val = ""
-    try:
-        kab_val = await page.locator(SEL["kabupaten"]).input_value()
-    except:
-        kab_val = ""
+    kdprov_norm = _norm_code(kdprov)
+    kdkab_norm  = _norm_code(kdkab)
+    kdkec_norm  = _norm_code(kdkec)
+    kddesa_norm = _norm_code(kddesa)
 
-    if (prov_val or "").strip() and (kab_val or "").strip():
-        logger.info(f"🔁 Wilayah sudah terisi (prov={prov_val}, kab={kab_val}) — skip set_wilayah")
-        return
+    # 1) Provinsi
+    if not prov_val.strip():
+        ok_prov = False
+        if kdprov_norm:
+            ok_prov = await _select_by_label_code(page, SEL["provinsi"], kdprov_norm)
+            if not ok_prov:
+                logger.warning(f"Gagal set provinsi kode [{kdprov_norm}], fallback ke DKI (116).")
+        if not ok_prov:
+            try:
+                await page.select_option(SEL["provinsi"], value="116")
+                ok_prov = True
+            except:
+                try:
+                    await page.select_option(SEL["provinsi"], label=re.compile(r"\[31\].*DKI.*JAKARTA", re.I))
+                    ok_prov = True
+                except:
+                    logger.warning("Gagal set provinsi via fallback DKI.")
+        await page.wait_for_timeout(600)
+        await _wait_options_loaded(page, SEL["kabupaten"], min_count=2)
 
-    logger.info("🗺️  Set wilayah: provinsi DKI JAKARTA, kab/kota JAKARTA PUSAT")
-    try:
-        await page.select_option(SEL["provinsi"], value="116")
-    except:
-        try:
-            await page.select_option(SEL["provinsi"], label=re.compile(r"\[31\].*DKI.*JAKARTA", re.I))
-        except:
-            logger.warning("Gagal set provinsi via value/label.")
+    # 2) Kab/Kota
+    if not kab_val.strip():
+        ok_kab = False
+        if kdkab_norm:
+            ok_kab = await _select_by_label_code(page, SEL["kabupaten"], kdkab_norm)
+        if not ok_kab:
+            # fallback Jakpus
+            try:
+                await page.select_option(SEL["kabupaten"], label=re.compile(r"\[\s*73\s*\].*JAKARTA\s*PUSAT", re.I))
+                ok_kab = True
+            except:
+                try:
+                    await page.select_option(SEL["kabupaten"], value="2319")
+                    ok_kab = True
+                except:
+                    logger.warning("Gagal set kabupaten via fallback.")
+        await page.wait_for_timeout(500)
+        await _wait_options_loaded(page, SEL["kecamatan"], min_count=2)
 
-    await page.wait_for_timeout(600)
+    # 3) Kecamatan
+    if not kec_val.strip():
+        if kdkec_norm:
+            ok_kec = await _select_by_label_code(page, SEL["kecamatan"], kdkec_norm)
+            if not ok_kec:
+                logger.warning(f"Gagal set kecamatan kode [{kdkec_norm}]")
+        await page.wait_for_timeout(400)
+        await _wait_options_loaded(page, SEL["kelurahan"], min_count=2)
 
-    kab_opt = page.locator(f"{SEL['kabupaten']} option[value='2319']")
-    try:
-        await kab_opt.wait_for(state="attached", timeout=5000)
-    except:
-        try:
-            await page.wait_for_function(
-                """(sel)=>document.querySelector(sel)?.querySelectorAll('option').length>1""",
-                arg=SEL["kabupaten"],
-                timeout=5000
-            )
-        except:
-            logger.warning("Opsi kabupaten belum terload, lanjut coba select langsung.")
+    # 4) Kelurahan/Desa
+    if not kel_val.strip():
+        if kddesa_norm:
+            ok_kel = await _select_by_label_code(page, SEL["kelurahan"], kddesa_norm)
+            if not ok_kel:
+                logger.warning(f"Gagal set kelurahan kode [{kddesa_norm}]")
 
-    try:
-        await page.select_option(SEL["kabupaten"], value="2319")
-    except:
-        try:
-            await page.select_option(SEL["kabupaten"], label=re.compile(r"\[73\].*JAKARTA\\s*PUSAT", re.I))
-        except:
-            logger.warning("Gagal set kabupaten via value/label.")
 
 async def set_bentuk_badan_usaha(page, text_value: str | None):
     if await page.locator(SEL["bentuk_badan_usaha"]).count() == 0: return
     sel = page.locator(SEL["bentuk_badan_usaha"]).first
-    
-    # Cek apakah bentuk_badan_usaha sudah terisi di form
+
+    # Jika sudah ada pilihan yang valid (bukan "-- pilih --" dan bukan "lainnya") → pertahankan
     try:
         current_value = await sel.evaluate("el => el.value")
         current_text = await sel.evaluate("el => el.options[el.selectedIndex].text")
-        
-        # Jika sudah terisi dan bukan "Lainnya", pertahankan nilai yang ada
-        if current_value and current_value != "0" and current_text and "pilih" not in current_text.lower():
-            # Cek apakah nilai saat ini adalah "Lainnya"
+        if current_value and current_text and "pilih" not in current_text.lower():
             if "lainnya" not in current_text.lower():
                 return
     except: pass
-    
-    # Jika bentuk_badan_usaha dari database adalah "Lainnya" atau kosong, pilih opsi default "-- Pilih Badan Hukum/Usaha --"
+
     if not text_value or text_value.strip().lower() == "lainnya":
         try:
-            # Pilih opsi pertama (biasanya opsi default "--Pilih....--")
-            await sel.select_option(index=0)
+            await sel.select_option(index=0)  # default
             return
         except: pass
-    
+
     try:
         options = await sel.locator("option").all_inner_texts()
         values  = await sel.locator("option").evaluate_all("opts=>opts.map(o=>o.value)")
@@ -470,7 +569,7 @@ async def set_bentuk_badan_usaha(page, text_value: str | None):
             score = fuzz.token_set_ratio(target, (opt or "").lower())
             if score > best_score:
                 best_idx, best_score = i, score
-        if best_idx >= 0 and best_idx < len(values):
+        if 0 <= best_idx < len(values):
             await sel.select_option(value=values[best_idx])
     except: pass
 
@@ -498,10 +597,6 @@ async def set_jaringan_usaha(page, text_value: str | None):
                 lbl = page.locator(f"label[for='{rid}']")
                 if await lbl.count() > 0:
                     label_text = (await lbl.first.inner_text()) or ""
-            if not label_text:
-                parent_label = r.locator("xpath=ancestor::label[1]")
-                if await parent_label.count() > 0:
-                    label_text = (await parent_label.first.inner_text()) or ""
         except: pass
         cand = f"{val} {label_text}".lower()
         score = fuzz.token_set_ratio(target, cand)
@@ -513,40 +608,95 @@ async def set_jaringan_usaha(page, text_value: str | None):
             try: await radios.nth(best_idx).click()
             except: pass
 
-async def set_keberadaan_usaha(page, status_text: str | None):
-    if not status_text: return
-    status = status_text.strip().lower()
-    if status == "aktif":
+# ---------- KBLI / Kegiatan Usaha ----------
+async def inject_kbli_row(page, kbli: str | None, kategori: str | None, deskripsi: str | None):
+    """
+    Isi 1 baris kegiatan usaha:
+      - input.l_kegiatan_usaha  (pakai deskripsi)
+      - select.l_kategori_usaha (pilih berdasarkan kode kategori A..U)
+      - select.l_kbli           (pilih berdasarkan kode KBLI, contoh '46636')
+      - input.l_produk_utama    (optional: kosongkan atau isi dengan deskripsi)
+    Jika belum ada baris, klik Add New dulu.
+    """
+    if not (kbli or kategori or deskripsi):
+        return
+
+    container = page.locator(SEL["container_repeater"])
+    if await container.count() == 0:
+        logger.warning("Container kegiatan usaha tidak ditemukan"); return
+
+    rows = container.locator(SEL["row_kegiatan"])
+    n = await rows.count()
+    if n == 0:
+        await page.click(SEL["btn_add_kegiatan"])
+        await page.wait_for_timeout(400)
+        rows = container.locator(SEL["row_kegiatan"])
+        n = await rows.count()
+        if n == 0:
+            logger.warning("Gagal menambah baris kegiatan usaha"); return
+
+    row0 = rows.nth(0)
+
+    # Kegiatan/Deskripsi
+    if deskripsi and deskripsi.strip():
         try:
-            r = page.locator("input#kondisi_aktif")
-            if await r.count() > 0:
-                await r.first.check()
-                return
+            await row0.locator(SEL["inp_kegiatan"]).fill(deskripsi.strip())
         except: pass
-    radios = page.locator(SEL["status_radios"])
-    n = await radios.count()
-    if n == 0: return
-    best_idx, best_score = -1, -1
-    for i in range(n):
-        r = radios.nth(i)
-        val = (await r.get_attribute("value")) or ""
-        rid = (await r.get_attribute("id")) or ""
-        label_text = ""
+
+    # Kategori (A..U)
+    if kategori and str(kategori).strip():
+        kat = str(kategori).strip().upper()[:1]
         try:
-            if rid:
-                lbl = page.locator(f"label[for='{rid}']")
-                if await lbl.count() > 0:
-                    label_text = (await lbl.first.inner_text()) or ""
-        except: pass
-        cand = f"{val} {label_text}".lower()
-        score = fuzz.token_set_ratio(status, cand)
-        if score > best_score:
-            best_idx, best_score = i, score
-    if best_idx >= 0:
-        try: await radios.nth(best_idx).check()
+            await row0.locator(SEL["sel_kategori"]).select_option(value=kat)
         except:
-            try: await radios.nth(best_idx).click()
+            try:
+                await row0.locator(SEL["sel_kategori"]).select_option(label=re.compile(rf"^\s*{kat}\s*-", re.I))
             except: pass
+
+    # KBLI (kode angka)
+    if kbli and str(kbli).strip():
+        kode = re.sub(r"\D", "", str(kbli))
+        if kode:
+            sel_kbli = row0.locator(SEL["sel_kbli"])
+            try:
+                await sel_kbli.select_option(value=kode)
+            except:
+                try:
+                    await sel_kbli.select_option(label=re.compile(rf"^{re.escape(kode)}$", re.I))
+                except: pass
+
+    # Optional isi produk = deskripsi
+    try:
+        if deskripsi and deskripsi.strip():
+            await row0.locator(SEL["inp_produk"]).fill(deskripsi.strip())
+    except: pass
+
+# ---------- SweetAlert lat/lng ----------
+async def handle_latlng_error_on_open(page):
+    """Segera tutup swal 'Format latitude tidak valid' jika muncul saat open form."""
+    try:
+        if await page.locator(SEL["swal_popup"]).count() > 0:
+            txt = (await page.locator(SEL["swal_text"]).inner_text()).strip().lower()
+            if "latitude" in txt and "tidak valid" in txt:
+                logger.info("ℹ️  SWAL lat/lng saat open form → klik OK")
+                await handle_any_swal(page)
+            if "longitude" in txt and "tidak valid" in txt:
+                logger.info("ℹ️  SWAL lat/lng saat open form → klik OK")
+                await handle_any_swal(page)
+    except: pass
+
+async def handle_latlng_error_after_submit(page):
+    """Setelah submit, kalau swal error lat/lng muncul, klik OK lalu lanjut (jangan skip)."""
+    try:
+        if await page.locator(SEL["swal_popup"]).count() > 0:
+            txt = (await page.locator(SEL["swal_text"]).inner_text()).strip().lower()
+            if "latitude" in txt and "tidak valid" in txt:
+                logger.info("ℹ️  SWAL lat/lng setelah submit → klik OK & lanjut")
+                await handle_any_swal(page)
+            if "longitude" in txt and "tidak valid" in txt:
+                logger.info("ℹ️  SWAL lat/lng setelah submit → klik OK & lanjut")
+                await handle_any_swal(page)
+    except: pass
 
 # ---------- Open Edit ----------
 async def open_edit_page(page):
@@ -554,31 +704,26 @@ async def open_edit_page(page):
     await edit.wait_for(state="visible", timeout=TIMEOUT_MS)
     try: await edit.evaluate("(a)=>a.removeAttribute('target')")
     except: pass
-    
-    # Buat task untuk menunggu halaman baru
+
     popup_task = asyncio.create_task(page.context.wait_for_event("page", timeout=5000))
-    
-    # Klik tombol edit
+
     await edit.click()
     await click_if_visible(page, SEL["swal_confirm"], 1500)
     await click_if_visible(page, SEL["swal_primary"], 1500)
-    
+
     try:
-        # Coba dapatkan halaman baru
         new_page = await popup_task
         await new_page.wait_for_load_state("domcontentloaded")
         await dismiss_intro_popup(new_page); await handle_any_swal(new_page)
         return new_page
     except Exception as e:
         logger.warning(f"Gagal mendapatkan halaman baru: {e}")
-        # Tunggu sebentar untuk memastikan navigasi selesai
         await asyncio.sleep(1)
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=5000)
             return page
         except Exception as e2:
             logger.error(f"Gagal menunggu load state: {e2}")
-            # Jika masih gagal, coba buat halaman baru
             new_page = await page.context.new_page()
             await new_page.goto(page.url)
             return new_page
@@ -606,29 +751,25 @@ async def process_row(page, row):
     await page.wait_for_timeout(800)
 
     # 2) cek hasil
-    await page.wait_for_timeout(1500)  # Tambah delay untuk memastikan hasil pencarian sudah dimuat
-    
+    await page.wait_for_timeout(1500)
     try:
-        # Tunggu halaman stabil sebelum mencari tombol edit
         await page.wait_for_load_state("networkidle", timeout=5000)
         edits = await page.locator(SEL["edit_buttons"]).all()
         logger.info(f"[{idsbr}] hasil edit buttons = {len(edits)}")
-        
-        # Coba lagi jika tidak ada hasil
+
         if len(edits) == 0:
-            logger.warning(f"[{idsbr}] Tidak ada hasil, mencoba lagi...")
+            logger.warning(f"[{idsbr}] Tidak ada hasil, mencoba lagi…")
             await page.click(SEL["btn_filter"])
-            await page.wait_for_timeout(2000)  # Tambah delay lebih lama
+            await page.wait_for_timeout(2000)
             await page.wait_for_load_state("networkidle", timeout=5000)
             edits = await page.locator(SEL["edit_buttons"]).all()
             logger.info(f"[{idsbr}] hasil edit buttons setelah coba ulang = {len(edits)}")
-        
+
         if len(edits) != 1:
             raise Exception(f"IDSBR {idsbr} tidak unik/0 hasil (len={len(edits)})")
     except Exception as e:
         if "Execution context was destroyed" in str(e):
-            logger.warning(f"[{idsbr}] Konteks eksekusi rusak, mencoba ulang pencarian...")
-            # Refresh halaman dan coba lagi
+            logger.warning(f"[{idsbr}] Konteks rusak, reload & coba ulang…")
             await page.reload()
             await page.wait_for_timeout(2000)
             await page.fill(SEL["search_input"], to_str(idsbr))
@@ -638,7 +779,6 @@ async def process_row(page, row):
             await page.wait_for_load_state("networkidle", timeout=5000)
             edits = await page.locator(SEL["edit_buttons"]).all()
             logger.info(f"[{idsbr}] hasil edit buttons setelah reload = {len(edits)}")
-            
             if len(edits) != 1:
                 raise Exception(f"IDSBR {idsbr} tidak unik/0 hasil setelah reload (len={len(edits)})")
         else:
@@ -650,6 +790,9 @@ async def process_row(page, row):
     try:
         logger.info(f"[{idsbr}] after edit -> url={page.url} | title={await page.title()}")
     except: pass
+
+    # Tangani swal lat/lng kalau muncul saat open (jangan skip)
+    await handle_latlng_error_on_open(page)
 
     # 4) race: locked atau form
     try:
@@ -681,28 +824,25 @@ async def process_row(page, row):
 
     # 5) isi field dasar
     logger.info(f"[{idsbr}] step: fill core fields")
-    
-    # Cek status untuk menentukan pengisian alamat
     status = row.get("status") if isinstance(row, dict) else row["status"]
     alamat = to_str(row["alamat"])
     nama_sls = to_str(row["nama_sls"])
-    
-    # Jika status "Aktif" dan alamat kosong, gunakan nama_sls sebagai alamat
+
     if status and status.strip().lower() == "aktif" and not alamat.strip():
         alamat = nama_sls
-    
+
     await page.fill(SEL["alamat"], alamat)
     await page.fill(SEL["sumber"], to_str(row["sumber_profiling"]))
     await page.fill(SEL["catatan"], to_str(row["catatan_profiling"]))
     await page.fill(SEL["sls"], nama_sls)
 
-    # 6) email & website
+    # 6) email & phone & website
     await set_email(page, row.get("email") if isinstance(row, dict) else row["email"])
     await set_telepon(page, row.get("nomor_telepon") if isinstance(row, dict) else row["nomor_telepon"])
     await set_whatsapp(page, row.get("nomor_whatsapp") if isinstance(row, dict) else row["nomor_whatsapp"])
     await set_website(page, row.get("website") if isinstance(row, dict) else row["website"])
 
-    # 7) lat/lng
+    # 7) lat/lng (kosongkan dulu → isi jika ada)
     await page.fill(SEL["lat"], ""); await page.fill(SEL["lng"], "")
     lat = row.get("latitude") if isinstance(row, dict) else row["latitude"]
     lng = row.get("longitude") if isinstance(row, dict) else row["longitude"]
@@ -710,10 +850,16 @@ async def process_row(page, row):
     if lng is not None and str(lng).strip(): await page.fill(SEL["lng"], str(lng))
 
     # 8) status
-    await set_keberadaan_usaha(page, row.get("status") if isinstance(row, dict) else row["status"])
+    await set_keberadaan_usaha(page, status)
 
-    # 9) wilayah
-    await set_wilayah(page)
+    # 9) wilayah — gunakan kdprov/kdkab/kdkec/kddesa dari database bila ada
+    await set_wilayah(
+        page,
+        (row.get("kdprov")  if isinstance(row, dict) else row["kdprov"]),
+        (row.get("kdkab")   if isinstance(row, dict) else row["kdkab"]),
+        (row.get("kdkec")   if isinstance(row, dict) else row["kdkec"]),
+        (row.get("kddesa")  if isinstance(row, dict) else row["kddesa"]),
+    )
 
     # 10) bentuk badan usaha
     await set_bentuk_badan_usaha(page, row.get("bentuk_badan_usaha") if isinstance(row, dict) else row["bentuk_badan_usaha"])
@@ -724,6 +870,14 @@ async def process_row(page, row):
     # 12) jaringan usaha
     await set_jaringan_usaha(page, row.get("jaringan_usaha") if isinstance(row, dict) else row["jaringan_usaha"])
 
+    # 12b) KBLI/Kegiatan Usaha dari DB (opsional)
+    await inject_kbli_row(
+        page,
+        (row.get("kbli") if isinstance(row, dict) else row["kbli"]),
+        (row.get("kategori") if isinstance(row, dict) else row["kategori"]),
+        (row.get("deskripsi_kegiatan_usaha") if isinstance(row, dict) else row["deskripsi_kegiatan_usaha"]),
+    )
+
     # 13) cek peta & submit
     logger.info(f"[{idsbr}] step: cek-peta")
     await page.click(SEL["cek_peta"])
@@ -733,6 +887,10 @@ async def process_row(page, row):
     await page.click(SEL["submit"])
     await click_if_visible(page, SEL["confirm_consistency"], 2000)
     await click_if_visible(page, SEL["ignore_consistency"], 2000)
+
+    # Jika muncul swal error lat/lng: klik OK dan lanjut submit flow tetap berakhir dengan swal done
+    await handle_latlng_error_after_submit(page)
+
     ok = await click_if_visible(page, SEL["swal_primary"], 5000)
     if not ok: await click_if_visible(page, SEL["swal_confirm"], 5000)
     await page.wait_for_selector(SEL["swal_popup"], timeout=TIMEOUT_MS)
@@ -778,7 +936,7 @@ async def run_worker(idx: int, pool):
             device_scale_factor=1.0,
         )
 
-        # --- Stealth patches (anti headless detection) ---
+        # Stealth patches
         await context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             window.chrome = window.chrome || { runtime: {} };
