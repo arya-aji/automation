@@ -1,0 +1,43 @@
+CREATE TABLE IF NOT EXISTS direktori_ids (
+  id SERIAL PRIMARY KEY,
+  tahap INT,
+  proses TEXT,
+  idsbr TEXT UNIQUE NOT NULL,
+  nama_usaha TEXT,
+  nama_komersial_usaha TEXT,
+  alamat TEXT,
+  nama_sls TEXT,
+  kodepos TEXT,
+  nomor_telepon TEXT,
+  nomor_whatsapp TEXT,
+  email TEXT,
+  website TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
+  status TEXT,
+  kdprov TEXT,
+  kdkab TEXT,
+  kdkec TEXT,
+  kddesa TEXT,
+  jenis_kepemilikan_usaha TEXT,
+  bentuk_badan_usaha TEXT,
+  deskripsi_badan_usaha_lainnya TEXT,
+  tahun_berdiri TEXT,
+  jaringan_usaha TEXT,
+  sektor_institusi TEXT,
+  deskripsi_kegiatan_usaha TEXT,
+  kategori TEXT,
+  kbli TEXT,
+  produk_usaha TEXT,
+  sumber_profiling TEXT,
+  catatan_profiling TEXT,
+
+  automation_status TEXT DEFAULT 'new', 
+  assigned_to TEXT,
+  last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  error TEXT
+);
+
+ALTER TABLE direktori_ids
+  ADD COLUMN IF NOT EXISTS attempt_count INT DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS first_taken_at TIMESTAMP NULL;
