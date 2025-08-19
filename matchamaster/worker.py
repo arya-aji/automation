@@ -445,6 +445,157 @@ async def _select_by_label_code(page, sel_css: str, code_norm: str) -> bool:
         pass
     return False
 
+def _pad3(x) -> str:
+    """Pastikan kode 3 digit, misal '10' -> '010'."""
+    try:
+        return f"{int(str(x).strip()):03d}"
+    except:
+        s = str(x or "").strip()
+        return (("000"+s)[-3:]) if s else ""
+
+async def _get_selected_text(page, sel_css: str) -> str:
+    try:
+        return await page.locator(sel_css).evaluate("el => el.options?.[el.selectedIndex]?.text || ''")
+    except:
+        return ""
+
+async def set_wilayah_from_db(page, kdkab: str | int | None, kdkec: str | int | None, kddesa: str | int | None):
+    """
+    Mengisi:
+      - Provinsi: tetap DKI (value='116') jika belum terisi.
+      - Kabupaten/Kota: pilih berdasarkan kdkab (label seperti '[73] JAKARTA PUSAT').
+      - Kecamatan: pilih berdasarkan kdkec (label seperti '[010] TANAH ABANG').
+      - Kelurahan/Desa: pilih berdasarkan kddesa (label seperti '[001] GELORA').
+
+    Semua pemilihan berbasis label (teks option) agar robust terhadap value dinamis.
+    """
+    # Pastikan elemen ada
+    if await page.locator(SEL["provinsi"]).count() == 0:
+        return
+
+    # 0) Pastikan Provinsi DKI JAKARTA (116) bila kosong
+    try:
+        prov_text = (await _get_selected_text(page, SEL["provinsi"])).lower()
+    except:
+        prov_text = ""
+    if not prov_text or "jakarta" not in prov_text:
+        try:
+            await page.select_option(SEL["provinsi"], value="116")
+        except:
+            try:
+                await page.select_option(SEL["provinsi"], label=re.compile(r"\[31\].*DKI.*JAKARTA", re.I))
+            except:
+                logger.warning("Gagal set provinsi DKI, lanjut tetap coba kab/kec/desa.")
+    # Beri waktu load dependent dropdown
+    await page.wait_for_timeout(600)
+
+    # Jika DB tidak menyediakan kdkab/kdkec/kddesa, fallback ke behavior lama (DKI / Jakpus default)
+    if not kdkab:
+        return await set_wilayah(page)
+
+    # Normalisasi kode label
+    kdkab_s  = str(kdkab).strip()                 # contoh '73'
+    kdkec_s  = _pad3(kdkec) if kdkec is not None else ""  # contoh '010'
+    kddesa_s = _pad3(kddesa) if kddesa is not None else ""# contoh '001'
+
+    kab_css = SEL["kabupaten"]
+    kec_css = SEL["kecamatan"] if "kecamatan" in SEL else "#kecamatan"
+    kel_css = SEL["kelurahan"] if "kelurahan" in SEL else "#kelurahan_desa"
+
+    # 1) KAB/KOTA
+    if await page.locator(kab_css).count() > 0:
+        # Skip jika sudah sesuai
+        cur_kab_txt = await _get_selected_text(page, kab_css)
+        if not re.search(rf"\[\s*{re.escape(kdkab_s)}\s*\]", cur_kab_txt or "", re.I):
+            # Tunggu opsi termuat
+            try:
+                await page.wait_for_function(
+                    "(sel)=>document.querySelector(sel)?.querySelectorAll('option').length>1",
+                    arg=kab_css, timeout=5000
+                )
+            except:
+                pass
+            # Pilih berdasarkan label [XX]
+            try:
+                await page.select_option(
+                    kab_css,
+                    label=re.compile(rf"\[\s*{re.escape(kdkab_s)}\s*\]", re.I)
+                )
+            except:
+                logger.warning(f"Gagal set kabupaten via label [ {kdkab_s} ], coba brute-find.")
+                # Brute: cari option yang match lalu set value-nya
+                try:
+                    opt_val = await page.locator(
+                        f"{kab_css} option",
+                        has_text=re.compile(rf"\[\s*{re.escape(kdkab_s)}\s*\]", re.I)
+                    ).first.get_attribute("value")
+                    if opt_val:
+                        await page.select_option(kab_css, value=opt_val)
+                except:
+                    logger.warning("Brute-find kabupaten juga gagal.")
+        await page.wait_for_timeout(600)
+
+    # 2) KECAMATAN
+    if kdkec_s and await page.locator(kec_css).count() > 0:
+        cur_kec_txt = await _get_selected_text(page, kec_css)
+        if not re.search(rf"\[\s*{re.escape(kdkec_s)}\s*\]", cur_kec_txt or "", re.I):
+            # Tunggu opsi kecamatan muncul setelah pilih kabupaten
+            try:
+                await page.wait_for_function(
+                    "(sel)=>document.querySelector(sel)?.querySelectorAll('option').length>1",
+                    arg=kec_css, timeout=7000
+                )
+            except:
+                pass
+            try:
+                await page.select_option(
+                    kec_css,
+                    label=re.compile(rf"\[\s*{re.escape(kdkec_s)}\s*\]", re.I)
+                )
+            except:
+                logger.warning(f"Gagal set kecamatan via label [ {kdkec_s} ], coba brute-find.")
+                try:
+                    opt_val = await page.locator(
+                        f"{kec_css} option",
+                        has_text=re.compile(rf"\[\s*{re.escape(kdkec_s)}\s*\]", re.I)
+                    ).first.get_attribute("value")
+                    if opt_val:
+                        await page.select_option(kec_css, value=opt_val)
+                except:
+                    logger.warning("Brute-find kecamatan juga gagal.")
+        await page.wait_for_timeout(500)
+
+    # 3) KELURAHAN/DESA
+    if kddesa_s and await page.locator(kel_css).count() > 0:
+        cur_kel_txt = await _get_selected_text(page, kel_css)
+        if not re.search(rf"\[\s*{re.escape(kddesa_s)}\s*\]", cur_kel_txt or "", re.I):
+            # Tunggu opsi kelurahan muncul setelah pilih kecamatan
+            try:
+                await page.wait_for_function(
+                    "(sel)=>document.querySelector(sel)?.querySelectorAll('option').length>1",
+                    arg=kel_css, timeout=7000
+                )
+            except:
+                pass
+            try:
+                await page.select_option(
+                    kel_css,
+                    label=re.compile(rf"\[\s*{re.escape(kddesa_s)}\s*\]", re.I)
+                )
+            except:
+                logger.warning(f"Gagal set kelurahan via label [ {kddesa_s} ], coba brute-find.")
+                try:
+                    opt_val = await page.locator(
+                        f"{kel_css} option",
+                        has_text=re.compile(rf"\[\s*{re.escape(kddesa_s)}\s*\]", re.I)
+                    ).first.get_attribute("value")
+                    if opt_val:
+                        await page.select_option(kel_css, value=opt_val)
+                except:
+                    logger.warning("Brute-find kelurahan juga gagal.")
+        await page.wait_for_timeout(400)
+
+
 async def set_wilayah(
     page,
     kdprov: str | int | None = None,
@@ -853,13 +1004,19 @@ async def process_row(page, row):
     await set_keberadaan_usaha(page, status)
 
     # 9) wilayah — gunakan kdprov/kdkab/kdkec/kddesa dari database bila ada
-    await set_wilayah(
-        page,
-        (row.get("kdprov")  if isinstance(row, dict) else row["kdprov"]),
-        (row.get("kdkab")   if isinstance(row, dict) else row["kdkab"]),
-        (row.get("kdkec")   if isinstance(row, dict) else row["kdkec"]),
-        (row.get("kddesa")  if isinstance(row, dict) else row["kddesa"]),
-    )
+    # await set_wilayah(
+    #     page,
+    #     (row.get("kdprov")  if isinstance(row, dict) else row["kdprov"]),
+    #     (row.get("kdkab")   if isinstance(row, dict) else row["kdkab"]),
+    #     (row.get("kdkec")   if isinstance(row, dict) else row["kdkec"]),
+    #     (row.get("kddesa")  if isinstance(row, dict) else row["kddesa"]),
+    # )
+
+    # 9) wilayah – isi dari DB (kdkab/kdkec/kddesa). Jika kosong, fallback ke default.
+    kdkab = row.get("kdkab") if isinstance(row, dict) else row["kdkab"]
+    kdkec = row.get("kdkec") if isinstance(row, dict) else row["kdkec"]
+    kddesa = row.get("kddesa") if isinstance(row, dict) else row["kddesa"]
+    await set_wilayah_from_db(page, kdkab, kdkec, kddesa)
 
     # 10) bentuk badan usaha
     await set_bentuk_badan_usaha(page, row.get("bentuk_badan_usaha") if isinstance(row, dict) else row["bentuk_badan_usaha"])
