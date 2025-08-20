@@ -14,12 +14,10 @@ MatchaMaster adalah skrip otomatisasi berbasis Python untuk mengisi dan memperba
 ## 📋 Persyaratan
 
 ### Sistem
-
 - Python 3.8 atau lebih tinggi
 - PostgreSQL database (lokal atau cloud seperti Neon)
 
 ### Dependensi Python
-
 ```bash
 pip install playwright asyncpg tenacity loguru python-dotenv rapidfuzz
 python -m playwright install chromium
@@ -54,7 +52,6 @@ LOGIN_PASSWORD=password_anda
 ## 🗄️ Struktur Database
 
 Aplikasi menggunakan tabel `direktori_ids` dengan struktur berikut:
-
 - `id`: ID unik
 - `idsbr`: ID SBR usaha
 - `automation_status`: Status otomatisasi ('new', 'in_progress', 'done', dll)
@@ -79,7 +76,6 @@ python worker.py --debug-idsbr=123456789
 ```
 
 Parameter tambahan:
-
 - `--slowmo=200`: Delay antar aksi dalam milidetik (default: 200)
 - `--devtools`: Buka DevTools browser saat debug
 
