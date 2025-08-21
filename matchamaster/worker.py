@@ -314,6 +314,27 @@ async def set_keberadaan_usaha(page, keberadaan: str):
     except Exception as e:
         print(f"❌ Gagal set keberadaan usaha: {e}")
 
+async def set_alamat(page, alamat_value: str | None):
+    has_input = await page.locator(SEL["alamat"]).count() > 0
+    if not has_input:
+        return
+
+    # Baca nilai yang sekarang ada di field form
+    cur = ""
+    try:
+        cur = (await page.locator(SEL["alamat"]).input_value()) or ""
+    except:
+        cur = ""
+
+    db_value = (alamat_value or "").strip()
+
+    # Kalau DB kosong → jangan ubah isi lama
+    if not db_value:
+        return
+
+    # Kalau DB ada isinya → isi ulang
+    await page.fill(SEL["alamat"], db_value)
+
 async def set_email(page, email_value: str | None):
     """
     - Jika form sudah ada email valid -> biarkan & pastikan checkbox tetap tercentang.
@@ -976,16 +997,12 @@ async def process_row(page, row):
     # 5) isi field dasar
     logger.info(f"[{idsbr}] step: fill core fields")
     status = row.get("status") if isinstance(row, dict) else row["status"]
-    alamat = to_str(row["alamat"])
     nama_sls = to_str(row["nama_sls"])
 
-    if status and status.strip().lower() == "aktif" and not alamat.strip():
-        alamat = nama_sls
-
-    await page.fill(SEL["alamat"], alamat)
     await page.fill(SEL["sumber"], to_str(row["sumber_profiling"]))
     await page.fill(SEL["catatan"], to_str(row["catatan_profiling"]))
     await page.fill(SEL["sls"], nama_sls)
+    await set_alamat(page, row.get("alamat") if isinstance(row, dict) else row["alamat"])
 
     # 6) email & phone & website
     await set_email(page, row.get("email") if isinstance(row, dict) else row["email"])
