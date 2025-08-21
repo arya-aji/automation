@@ -296,23 +296,68 @@ def _only_digits(s: str | None) -> str:
     if not s: return ""
     return re.sub(r"\D", "", str(s))
 
-# ---------- Field Setters ----------
-async def set_keberadaan_usaha(page, keberadaan: str):
-    """
-    Mengatur keberadaan usaha (aktif/tidak aktif/dll) sesuai data database.
+STATUS_MAP = {
+    "aktif": "kondisi_aktif",
+    "tutup sementara": "kondisi_tutup_sementara",
+    "belum beroperasi": "kondisi_belum_operasi",
+    "belum beroperasi/berproduksi": "kondisi_belum_operasi",
+    "tutup": "kondisi_tutup",
+    "alih usaha": "kondisi_alih_usaha",
+    "tidak ditemukan": "kondisi_tidak_ditemukan",
+    "aktif pindah": "kondisi_aktif_pindah",
+    "aktif nonrespon": "kondisi_aktif_nonrespon",
+    "duplikat": "kondisi_duplikat",
+    "salah kode wilayah": "kondisi_salah_kode_wilayah",
+}
 
-    keberadaan: string, misalnya "Aktif", "Tidak Aktif", "Tutup Sementara"
+async def set_keberadaan_usaha(page, keberadaan: str | None):
     """
+    Pilih radio kondisi usaha sesuai data DB.
+    """
+    if not keberadaan:
+        return
+
+    keberadaan_norm = keberadaan.strip().lower()
+    target_id = None
+    for key, rid in STATUS_MAP.items():
+        if key in keberadaan_norm:
+            target_id = rid
+            break
+
+    if not target_id:
+        print(f"⚠️ Tidak ada mapping radio untuk '{keberadaan}'")
+        return
+
     try:
-        # Pastikan ada elemen select/radio box untuk keberadaan
-        locator = page.locator("#keberadaan_usaha")
-        if await locator.count() > 0:
-            await locator.select_option(label=keberadaan)
-            print(f"✅ Keberadaan usaha diset ke {keberadaan}")
+        radio = page.locator(f"#{target_id}")
+        if await radio.count() > 0:
+            await radio.check()
+            print(f"✅ Kondisi usaha diset ke {keberadaan} (id={target_id})")
         else:
-            print("⚠️ Elemen keberadaan usaha tidak ditemukan, skip.")
+            print(f"❌ Radio {target_id} tidak ditemukan di halaman")
     except Exception as e:
-        print(f"❌ Gagal set keberadaan usaha: {e}")
+        print(f"❌ Gagal set kondisi usaha: {e}")
+
+async def set_alamat(page, alamat_value: str | None):
+    has_input = await page.locator(SEL["alamat"]).count() > 0
+    if not has_input:
+        return
+
+    # Baca nilai yang sekarang ada di field form
+    cur = ""
+    try:
+        cur = (await page.locator(SEL["alamat"]).input_value()) or ""
+    except:
+        cur = ""
+
+    db_value = (alamat_value or "").strip()
+
+    # Kalau DB kosong → jangan ubah isi lama
+    if not db_value:
+        return
+
+    # Kalau DB ada isinya → isi ulang
+    await page.fill(SEL["alamat"], db_value)
 
 async def set_email(page, email_value: str | None):
     """
@@ -976,16 +1021,12 @@ async def process_row(page, row):
     # 5) isi field dasar
     logger.info(f"[{idsbr}] step: fill core fields")
     status = row.get("status") if isinstance(row, dict) else row["status"]
-    alamat = to_str(row["alamat"])
     nama_sls = to_str(row["nama_sls"])
 
-    if status and status.strip().lower() == "aktif" and not alamat.strip():
-        alamat = nama_sls
-
-    await page.fill(SEL["alamat"], alamat)
     await page.fill(SEL["sumber"], to_str(row["sumber_profiling"]))
     await page.fill(SEL["catatan"], to_str(row["catatan_profiling"]))
     await page.fill(SEL["sls"], nama_sls)
+    await set_alamat(page, row.get("alamat") if isinstance(row, dict) else row["alamat"])
 
     # 6) email & phone & website
     await set_email(page, row.get("email") if isinstance(row, dict) else row["email"])
