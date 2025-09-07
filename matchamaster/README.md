@@ -13,6 +13,68 @@
 
 MatchaMaster adalah skrip otomatisasi berbasis Python untuk mengisi dan memperbarui data pada platform [Direktori Usaha BPS (MatchaPro)](https://matchapro.web.bps.go.id/direktori-usaha) secara efisien dan akurat. Proyek ini menggunakan Playwright untuk otomatisasi browser dan PostgreSQL untuk penyimpanan data.
 
+## 🚀 Panduan Lengkap untuk Pengguna Awam
+
+### Tahap 1: Persiapan Database (NEON PostgreSQL)
+1. **Daftar akun NEON Database**
+   - Kunjungi [neon.tech](https://neon.tech) dan buat akun gratis
+   - Buat database baru dengan nama `matchamaster_db`
+   - Catat connection string yang diberikan
+
+2. **Setup Environment Variables**
+   - Copy file `.env.example` menjadi `.env`
+   - Isi connection string NEON ke dalam file `.env`
+
+### Tahap 2: Persiapan Data Master
+1. **Download template data**
+   - Gunakan file `contoh_data_master.csv` atau `contoh_data_master.xlsx`
+   - Isi data sesuai format yang telah ditentukan
+
+2. **🔍 Deteksi Duplikat Data (WAJIB)**
+   ```bash
+   cd "Import to DB"
+   python find_duplicates.py
+   ```
+   - **Jalankan ini PERTAMA** untuk menjaring data master yang duplikat
+   - Perbaiki semua duplikat sebelum melanjutkan
+
+### Tahap 3: Import Data ke Database
+1. **Install dependencies Python**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Import data master**
+   ```bash
+   cd "Import to DB"
+   python import_excel_to_postgres.py
+   ```
+
+### Tahap 4: Setup Browser Automation
+1. **Install Playwright**
+   ```bash
+   pip install playwright
+   playwright install chromium
+   ```
+
+2. **Test koneksi**
+   ```bash
+   python record_login.py
+   ```
+
+### Tahap 5: Menjalankan Otomatisasi
+1. **Mode normal**
+   ```bash
+   python worker.py
+   ```
+
+2. **Mode debug (untuk testing)**
+   ```bash
+   python debug_single.py --headless=false
+   ```
+
+---
+
 ## 📊 Contoh Data Master
 
 Untuk melihat contoh struktur data yang diperlukan, silakan kunjungi:

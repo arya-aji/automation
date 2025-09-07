@@ -18,7 +18,75 @@ MatchaMaster adalah skrip otomatisasi berbasis Python untuk mengisi dan memperba
 Data master untuk otomatisasi dapat diakses melalui [Google Spreadsheet MatchaMaster](https://s.bps.go.id/matchamaster). Data ini berisi informasi lengkap usaha yang akan diproses oleh sistem otomatisasi.
 
 
-## 🚀 Fitur Utama
+## 🚀 Panduan Lengkap untuk Pengguna Awam
+
+### Tahap 1: Persiapan Database (NEON PostgreSQL)
+1. **Daftar akun NEON Database**
+   - Kunjungi [neon.tech](https://neon.tech) dan buat akun gratis
+   - Buat database baru dengan nama `matchamaster_db`
+   - Catat connection string yang diberikan
+
+2. **Setup Environment Variables**
+   - Copy file `.env.example` menjadi `.env`
+   - Isi connection string NEON ke dalam file `.env`
+
+### Tahap 2: Persiapan Data Master
+1. **Download template data**
+   - Gunakan file `contoh_data_master.csv` atau `contoh_data_master.xlsx`
+   - Isi data sesuai format yang telah ditentukan
+
+2. **🔍 Deteksi Duplikat Data (WAJIB)**
+   ```bash
+   cd "Import to DB"
+   python find_duplicates.py
+   ```
+   - **Jalankan ini PERTAMA** untuk menjaring data master yang duplikat
+   - Perbaiki semua duplikat sebelum melanjutkan
+
+### Tahap 3: Import Data ke Database
+1. **Install dependencies Python**
+   ```bash
+   # Dari root folder automation
+   pip install -r requirements.txt
+   
+   # Atau dari folder matchamaster
+   cd matchamaster
+   pip install -r requirements.txt
+   ```
+
+2. **Import data master**
+   ```bash
+   cd matchamaster
+   cd "Import to DB"
+   python import_excel_to_postgres.py
+   ```
+
+### Tahap 4: Setup Browser Automation
+1. **Install Playwright**
+   ```bash
+   pip install playwright
+   playwright install chromium
+   ```
+
+2. **Simpan login state**
+   ```bash
+   python record_login.py
+   ```
+
+### Tahap 5: Menjalankan Otomatisasi
+1. **Mode normal**
+   ```bash
+   python worker.py
+   ```
+
+2. **Mode debug (untuk testing)**
+   ```bash
+   python debug_single.py --headless=false
+   ```
+
+---
+
+##  Fitur Utama
 
 - Otomatisasi pengisian form data usaha pada platform MatchaPro
 - Dukungan multi-worker untuk pemrosesan paralel
@@ -149,20 +217,28 @@ Aplikasi menggunakan tabel `direktori_ids` dengan struktur berikut:
 ## 📥 Import Data Master
 
 ### ⚠️ Persyaratan Data
-**PENTING**: Sebelum melakukan import, pastikan data Anda:
-- ✅ **Tidak ada missing data** - Semua field wajib harus terisi
-- ✅ **Data sudah clean** - Tidak ada karakter aneh, format konsisten
-- ✅ **Validasi manual** - Periksa kembali keakuratan data sebelum import
-- ✅ **Backup data** - Simpan salinan data asli sebelum import
+**PENTING**: Data master harus memenuhi kriteria berikut:
+- ✅ **Tidak ada missing data** - Semua field wajib terisi lengkap
+- ✅ **Data sudah clean** - Bebas dari karakter aneh, format konsisten
+- ✅ **Validasi manual** - Periksa keakuratan sebelum import
+- ✅ **Backup tersedia** - Simpan salinan data asli
 
-Untuk mengimpor data dari Excel/CSV ke PostgreSQL:
+### 🔄 Proses Import (Ikuti Urutan)
 
-### 1. Persiapan Data
-- Gunakan template `contoh_data_master.csv` atau `contoh_data_master.xlsx` sebagai referensi
+**LANGKAH 1: Deteksi Duplikat (WAJIB PERTAMA)**
+```bash
+cd "Import to DB"
+python find_duplicates.py
+```
+> ⚠️ **PENTING**: Jalankan ini SEBELUM import untuk menjaring data duplikat
+
+**LANGKAH 2: Persiapan Data**
+- Gunakan template `contoh_data_master.csv` atau `contoh_data_master.xlsx`
+- Perbaiki semua duplikat yang ditemukan di langkah 1
 - Pastikan struktur kolom sesuai dengan mapping di `COLUMN_MAP`
 - Data harus dalam format Excel (.xlsx) atau CSV
 
-### 2. Konfigurasi Environment
+**LANGKAH 3: Konfigurasi Environment**
 Tambahkan konfigurasi berikut ke file `.env`:
 
 ```
@@ -172,15 +248,20 @@ SHEET_NAME=Sheet1               # nama sheet (kosongkan untuk sheet aktif)
 CHUNK_SIZE=1000                 # ukuran batch import
 ```
 
-### 3. Jalankan Import
+**LANGKAH 4: Import ke Database**
 ```bash
-cd "matchamaster/Import to DB"
+# Pastikan sudah install dependencies
+cd matchamaster
+pip install -r requirements.txt
+
+# Import data
+cd "Import to DB"
 python import_excel_to_postgres.py
 ```
 
-### 4. Validasi Data
-Setelah import, gunakan script untuk mencari duplikat:
+**LANGKAH 5: Validasi Final**
 ```bash
+# Verifikasi data berhasil diimport
 python find_duplicates.py
 ```
 
