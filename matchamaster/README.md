@@ -1,6 +1,26 @@
 # MatchaMaster - Otomatisasi Direktori Usaha BPS
 
+🤖 **Sistem otomatisasi untuk pengisian data direktori usaha BPS menggunakan Python dan Playwright**
+
+## ⚠️ Pemberitahuan Penting
+
+**DISCLAIMER**: Aplikasi ini hanya berfungsi sebagai **alat bantu otomatisasi entri data** dan **pengganti tenaga manusia** untuk proses input. 
+
+- 📊 **Sumber data dan validitas data tetap menjadi tanggung jawab penuh tim pengumpulan data**
+- 🔍 **Tim pengumpulan data wajib memverifikasi keakuratan data sebelum dan sesudah proses otomatisasi**
+- 📋 **Aplikasi tidak bertanggung jawab atas kesalahan data yang berasal dari sumber data master**
+- ✅ **Pastikan data master sudah divalidasi dan disetujui oleh supervisor sebelum menggunakan aplikasi ini**
+
 MatchaMaster adalah skrip otomatisasi berbasis Python untuk mengisi dan memperbarui data pada platform [Direktori Usaha BPS (MatchaPro)](https://matchapro.web.bps.go.id/direktori-usaha) secara efisien dan akurat. Proyek ini menggunakan Playwright untuk otomatisasi browser dan PostgreSQL untuk penyimpanan data.
+
+## 📊 Contoh Data Master
+
+Untuk melihat contoh struktur data yang diperlukan, silakan kunjungi:
+**[https://s.bps.go.id/matchamaster](https://s.bps.go.id/matchamaster)**
+
+Atau lihat file contoh di folder ini:
+- `contoh_data_master.csv` - Template CSV dengan 5 contoh data lengkap
+- `contoh_data_master.xlsx` - Dokumentasi struktur kolom Excel
 
 ## 🚀 Fitur Utama
 
